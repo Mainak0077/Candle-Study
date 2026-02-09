@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Candle | Calendar Tracker</title>
+    <style>
+        :root {
+            --bg-dark: #0f0f12;
+            --wax-color: #E6D5C3;
+            --flame-base: #0033ff;
+            --flame-mid: #ff7b00;
+            --flame-tip: #ffff99;
+            --glow-color: rgba(255, 160, 50, 0.15);
+            --ui-bg: rgba(255,255,255,0.08);
+            --accent: #d4a373;
+            --text-muted: #888;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            background: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            color: #ccc;
+        }
+
+        /* --- THE ATMOSPHERE --- */
+        .room-light {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 60%, var(--glow-color) 0%, transparent 60%);
+            opacity: 0;
+            transition: opacity 1s;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .room-light.lit { animation: light-flicker 4s infinite alternate; opacity: 0.8; }
+
+        /* --- UI - TOP SECTION --- */
+        .top-ui {
+            position: absolute;
+            top: 40px;
+            width: 90%;
+            max-width: 600px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.5s;
+            padding: 15px 25px;
+            background: var(--ui-bg);
+            border-radius: 40px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 1.5rem;
+            color: #fff;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+
+        .cal-toggle-btn {
+            background: transparent;
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 8px 18px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .cal-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* --- UI - BOTTOM SECTION --- */
+        .bottom-ui {
+            position: absolute;
+            bottom: 60px;
+            z-index: 100;
+            transition: opacity 0.5s;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+        .main-action-btn {
+            background: var(--accent);
+            color: #1a1a1d;
+            border: none;
+            padding: 18px 60px;
+            border-radius: 40px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 1px;
+            box-shadow: 0 0 25px rgba(212, 163, 115, 0.2);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .main-action-btn:hover { transform: translateY(-2px); box-shadow: 0 0 35px rgba(212, 163, 115, 0.4); }
+        
+        .main-action-btn.active { 
+            background: transparent; 
+            color: #ff6b6b; 
+            border: 1px solid #ff6b6b;
+            box-shadow: none;
+        }
+        .main-action-btn.active:hover { background: rgba(255, 107, 107, 0.1); }
+
+        /* Focus Mode (Dim UI) */
+        .focus-mode .top-ui, .focus-mode .bottom-ui { opacity: 0.2; filter: blur(1px); }
+        .focus-mode .top-ui:hover, .focus-mode .bottom-ui:hover { opacity: 1; filter: blur(0); }
+
+
+        /* --- THE CANDLE --- */
+        .scene {
+            position: relative; z-index: 10; height: 400px; width: 200px;
+            display: flex; align-items: flex-end; justify-content: center;
+        }
+        .candle-body {
+            width: 80px; height: 300px;
+            background: linear-gradient(to right, #bda892, var(--wax-color) 30%, var(--wax-color) 60%, #bda892);
+            border-radius: 4px; position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: height 1s linear;
+        }
+        .candle-top {
+            position: absolute; top: -15px; left: 0; width: 80px; height: 30px;
+            background: radial-gradient(circle at center, #fff5e6, var(--wax-color));
+            border-radius: 50%; z-index: 2;
+        }
+        .candle-top::after {
+            content: ''; position: absolute; top: 5px; left: 15px; right: 15px; bottom: 5px;
+            background: radial-gradient(circle, rgba(255,160,0,0.6), transparent 70%);
+            border-radius: 50%; opacity: 0; transition: opacity 0.5s; filter: blur(5px);
+        }
+        .candle-top.glowing::after { opacity: 1; }
+        .wick {
+            width: 4px; height: 12px; background: #222; position: absolute;
+            top: 8px; left: 50%; transform: translateX(-50%); border-radius: 2px; z-index: 3;
+        }
+        .flame-container {
+            position: absolute; top: -25px; left: 50%; transform: translateX(-50%) scale(0);
+            transform-origin: center bottom; transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 5; filter: blur(0.5px);
+        }
+        .flame-container.active { transform: translateX(-50%) scale(1); }
+        .flame-main {
+            width: 24px; height: 50px;
+            background: linear-gradient(to top, var(--flame-base) 0%, transparent 20%, var(--flame-mid) 50%, var(--flame-tip) 100%);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; position: absolute; bottom: 0; left: -12px;
+            animation: flame-dance 0.1s infinite alternate; box-shadow: 0 -5px 10px var(--flame-mid);
+        }
+        .flame-halo {
+            width: 120px; height: 120px; background: radial-gradient(closest-side, rgba(255,200,100,0.2), transparent);
+            position: absolute; bottom: -35px; left: -60px; border-radius: 50%;
+            animation: halo-pulse 0.2s infinite alternate; z-index: -1;
+        }
+        .smoke {
+            position: absolute; background: rgba(255,255,255,0.2); border-radius: 50%;
+            pointer-events: none; animation: rise 2s forwards; filter: blur(3px);
+        }
+
+        /* --- CALENDAR MODAL --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 200;
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
+            backdrop-filter: blur(5px);
+        }
+        .modal-overlay.visible { opacity: 1; pointer-events: all; }
+        
+        .calendar-box {
+            background: #1a1a1d; padding: 40px; border-radius: 24px;
+            width: 90%; max-width: 420px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+            transform: scale(0.95); transition: transform 0.3s;
+        }
+        .modal-overlay.visible .calendar-box { transform: scale(1); }
+
+        .cal-header { 
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 25px; color: var(--accent); font-size: 1.3rem; letter-spacing: 1px;
+        }
+        .close-btn { 
+            cursor: pointer; font-size: 1.5rem; color: var(--text-muted); transition: color 0.2s;
+            width: 30px; height: 30px; line-height: 30px;
+        }
+        .close-btn:hover { color: #fff; }
+        
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+        .day-label { color: #555; font-size: 0.75rem; padding-bottom: 10px; font-weight: bold; }
+        
+        .cal-day {
+            aspect-ratio: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: #252529; border-radius: 10px; position: relative; font-size: 0.9rem; color: #777;
+            transition: transform 0.2s;
+        }
+        .cal-day:hover { background: #2f2f33; }
+        .cal-day.today { border: 1px solid var(--accent); color: var(--accent); }
+        
+        .cal-day.has-data { 
+            background: rgba(212, 163, 115, 0.15); 
+            color: #fff; 
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(212, 163, 115, 0.05);
+        }
+        .candle-count { 
+            font-size: 0.65rem; color: var(--accent); margin-top: 4px; 
+            display: flex; align-items: center; gap: 2px;
+        }
+
+
+        /* --- ANIMATIONS --- */
+        @keyframes flame-dance {
+            0% { transform: skewX(-2deg) scaleY(1); border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
+            100% { transform: skewX(2deg) scaleY(1.02); border-radius: 50% 50% 50% 50% / 65% 65% 35% 35%; }
+        }
+        @keyframes light-flicker {
+            0%, 100% { opacity: 0.8; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.98); }
+        }
+        @keyframes rise {
+            0% { transform: translateY(0) scale(1); opacity: 0.5; }
+            100% { transform: translateY(-100px) scale(3); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="room-light" id="roomLight"></div>
+
+    <div class="top-ui">
+        <span class="timer-display" id="timeDisplay">02:00:00</span>
+        <button class="cal-toggle-btn" onclick="openCalendar()">
+            <span>📅</span> Calendar
+        </button>
+    </div>
+
+    <div class="scene">
+        <div class="candle-body" id="candleBody">
+            <div class="candle-top" id="candleTop">
+                <div class="wick" id="wick">
+                    <div class="flame-container" id="flameRef">
+                        <div class="flame-main"></div>
+                        <div class="flame-halo"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-ui">
+        <button onclick="toggleSession()" id="actionBtn" class="main-action-btn">Ignite</button>
+    </div>
+
+    <div class="modal-overlay" id="calModal" onclick="closeCalendarOutside(event)">
+        <div class="calendar-box">
+            <div class="cal-header">
+                <span id="calMonthYear">Month YYYY</span>
+                <span class="close-btn" onclick="closeCalendar()">×</span>
+            </div>
+            <div class="cal-grid" id="calGrid">
+                </div>
+            <p style="margin-top:20px; font-size:0.8rem; color:#666;">
+                Each 🕯️ represents a completed session.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIG ---
+        const START_MINUTES = 120; // 2 hours standard
+        const MAX_HEIGHT = 300; 
+        const MIN_HEIGHT = 50;  
+
+        // --- STATE ---
+        let timeLeft = START_MINUTES * 60;
+        let isActive = false;
+        let timer = null;
+        let calendarData = JSON.parse(localStorage.getItem('candleCalendar')) || {};
+
+        // --- ELEMENTS ---
+        const body = document.body;
+        const candleBody = document.getElementById('candleBody');
+        const candleTop = document.getElementById('candleTop');
+        const flameEl = document.getElementById('flameRef');
+        const roomLight = document.getElementById('roomLight');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const actionBtn = document.getElementById('actionBtn');
+        const wick = document.getElementById('wick');
+        const calModal = document.getElementById('calModal');
+        const calGrid = document.getElementById('calGrid');
+        const calMonthYear = document.getElementById('calMonthYear');
+
+        // --- CORE FUNCTIONS ---
+
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        }
+
+        function toggleSession() {
+            isActive ? pause() : start();
+        }
+
+        function start() {
+            isActive = true;
+            actionBtn.textContent = "Extinguish";
+            actionBtn.classList.add('active');
+            body.classList.add('focus-mode'); // Dims UI
+            
+            flameEl.classList.add('active');
+            candleTop.classList.add('glowing');
+            roomLight.classList.add('lit');
+
+            timer = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    updateVisuals();
+                } else {
+                    finish();
+                }
+            }, 1000);
+        }
+
+        function pause() {
+            isActive = false;
+            clearInterval(timer);
+            actionBtn.textContent = "Ignite";
+            actionBtn.classList.remove('active');
+            body.classList.remove('focus-mode');
+
+            flameEl.classList.remove('active');
+            candleTop.classList.remove('glowing');
+            roomLight.classList.remove('lit');
+            
+            if (timeLeft > 0) generateSmoke();
+        }
+
+        function finish() {
+            // 1. Stop everything
+            pause();
+            actionBtn.textContent = "Session Complete";
+            
+            // 2. Reset Timer visually for next time
+            timeLeft = START_MINUTES * 60; 
+            updateVisuals();
+            
+            // 3. Effects
+            generateSmoke(3); 
+            
+            // 4. Update Data & SHOW CALENDAR REWARD
+            incrementDailyCount();
+            setTimeout(() => {
+                openCalendar(); // Auto-open calendar to show progress
+            }, 1000);
+        }
+
+        function updateVisuals() {
+            timeDisplay.textContent = formatTime(timeLeft);
+            const totalSeconds = START_MINUTES * 60;
+            const percentage = timeLeft / totalSeconds;
+            const currentHeight = Math.max(MIN_HEIGHT, MIN_HEIGHT + (percentage * (MAX_HEIGHT - MIN_HEIGHT)));
+            candleBody.style.height = `${currentHeight}px`;
+        }
+
+        function generateSmoke(amount = 1) {
+            for(let i=0; i<amount*3; i++) {
+                setTimeout(() => {
+                    const puff = document.createElement('div');
+                    puff.classList.add('smoke');
+                    const size = 10 + Math.random() * 20;
+                    puff.style.cssText = `width:${size}px; height:${size}px; left:${Math.random()*10-5}px`;
+                    wick.appendChild(puff);
+                    setTimeout(() => puff.remove(), 2000);
+                }, i * 150);
+            }
+        }
+
+        // --- CALENDAR LOGIC ---
+
+        function getTodayString() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function incrementDailyCount() {
+            const today = getTodayString();
+            calendarData[today] = (calendarData[today] || 0) + 1;
+            localStorage.setItem('candleCalendar', JSON.stringify(calendarData));
+            // If calendar happens to be open, re-render it
+            if(calModal.classList.contains('visible')) renderCalendar();
+        }
+
+        function openCalendar() {
+            renderCalendar();
+            calModal.classList.add('visible');
+        }
+
+        function closeCalendar() {
+            calModal.classList.remove('visible');
+        }
+        
+        // Close if clicking the dark background
+        function closeCalendarOutside(e) {
+            if (e.target === calModal) closeCalendar();
+        }
+
+        function renderCalendar() {
+            calGrid.innerHTML = '';
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            const todayStr = getTodayString();
+
+            calMonthYear.textContent = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            // Labels
+            ['S','M','T','W','T','F','S'].forEach(day => {
+                calGrid.innerHTML += `<div class="day-label">${day}</div>`;
+            });
+
+            // Calculate grid padding
+            const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                calGrid.appendChild(document.createElement('div'));
+            }
+
+            // Draw Days
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                const dayEl = document.createElement('div');
+                dayEl.classList.add('cal-day');
+                dayEl.innerHTML = `<span>${i}</span>`;
+
+                if (dateStr === todayStr) dayEl.classList.add('today');
+
+                const count = calendarData[dateStr];
+                if (count) {
+                    dayEl.classList.add('has-data');
+                    // Add the small candle icon and count
+                    dayEl.innerHTML += `<div class="candle-count">🕯️${count}</div>`;
+                }
+                calGrid.appendChild(dayEl);
+            }
+        }
+
+        // Init
+        updateVisuals();
+    </script>
+</body>
+</html>
